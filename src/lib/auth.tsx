@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const init = async () => {
             // Check if local-only super admin was previously logged in
-            const savedRole = sessionStorage.getItem('auth_vault_role');
+            const savedRole = localStorage.getItem('auth_vault_role');
             if (savedRole === 'super_admin') {
                 setRole('super_admin');
                 setUser({ id: 'super_admin', email: SUPER_ADMIN_USERNAME, user_metadata: {} } as User);
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, session) => {
-                const savedRole = sessionStorage.getItem('auth_vault_role');
+                const savedRole = localStorage.getItem('auth_vault_role');
                 if (savedRole === 'super_admin') return;
 
                 if (session?.user) {
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isSuperAdmin(identifier, password)) {
             setUser({ id: 'super_admin', email: SUPER_ADMIN_USERNAME, user_metadata: {} } as User);
             setRole('super_admin');
-            sessionStorage.setItem('auth_vault_role', 'super_admin');
+            localStorage.setItem('auth_vault_role', 'super_admin');
             return null;
         }
 
@@ -137,9 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Logout
     const logout = useCallback(async () => {
-        const savedRole = sessionStorage.getItem('auth_vault_role');
+        const savedRole = localStorage.getItem('auth_vault_role');
         if (savedRole === 'super_admin') {
-            sessionStorage.removeItem('auth_vault_role');
+            localStorage.removeItem('auth_vault_role');
             setUser(null);
             setRole(null);
             return;
