@@ -48,60 +48,101 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [role, setRole] = useState<UserRole | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Check existing session on mount
+    // Helper: fetch profile role from Supabase
+    const fetchRole = async (userId: string): Promise<UserRole> => {
+        try {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', userId)
+                .single();
+            return (profile?.role as UserRole) || 'user';
+        } catch {
+            return 'user';
+        }
+    };
+
+    // Initialize auth on mount
     useEffect(() => {
+        let mounted = true;
+
+        // Safety timeout — never stay loading forever
+        const safetyTimer = setTimeout(() => {
+            if (mounted) setLoading(false);
+        }, 10000);
+
         const init = async () => {
-            // Check if local-only super admin was previously logged in
-            const savedRole = localStorage.getItem('auth_vault_role');
-            if (savedRole === 'super_admin') {
-                setRole('super_admin');
-                setUser({ id: 'super_admin', email: SUPER_ADMIN_USERNAME, user_metadata: {} } as User);
-                setLoading(false);
-                return;
-            }
+            try {
+                // 1) Check local-only super admin first
+                const savedRole = localStorage.getItem('auth_vault_role');
+                if (savedRole === 'super_admin') {
+                    if (mounted) {
+                        setRole('super_admin');
+                        setUser({ id: 'super_admin', email: SUPER_ADMIN_USERNAME, user_metadata: {} } as User);
+                        setLoading(false);
+                    }
+                    return;
+                }
 
-            // Check Supabase session
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                setUser(session.user);
-                // Fetch profile role
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', session.user.id)
-                    .single();
+                // 2) Check Supabase session
+                const { data: { session }, error } = await supabase.auth.getSession();
 
-                setRole((profile?.role as UserRole) || 'user');
+                if (error) {
+                    console.warn('Auth: getSession failed:', error.message);
+                    if (mounted) setLoading(false);
+                    return;
+                }
+
+                if (session?.user && mounted) {
+                    setUser(session.user);
+                    const userRole = await fetchRole(session.user.id);
+                    if (mounted) setRole(userRole);
+                }
+
+                if (mounted) setLoading(false);
+            } catch (err) {
+                console.warn('Auth: init error:', err);
+                if (mounted) setLoading(false);
             }
-            setLoading(false);
         };
 
         init();
 
-        // Listen for auth changes
+        // Listen for auth state changes (token refresh, sign out, etc.)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event, session) => {
+            async (event, session) => {
+                if (!mounted) return;
+
                 const savedRole = localStorage.getItem('auth_vault_role');
                 if (savedRole === 'super_admin') return;
 
+                if (event === 'SIGNED_OUT') {
+                    setUser(null);
+                    setRole(null);
+                    return;
+                }
+
                 if (session?.user) {
                     setUser(session.user);
-                    // Fetch role again if changed
-                    const { data: profile } = await supabase
-                        .from('profiles')
-                        .select('role')
-                        .eq('id', session.user.id)
-                        .single();
-
-                    setRole((profile?.role as UserRole) || 'user');
-                } else {
+                    try {
+                        const userRole = await fetchRole(session.user.id);
+                        if (mounted) setRole(userRole);
+                    } catch {
+                        if (mounted) setRole('user');
+                    }
+                } else if (event !== 'INITIAL_SESSION') {
+                    // Only clear user if it's not the initial load (which init() handles)
                     setUser(null);
                     setRole(null);
                 }
             }
         );
 
-        return () => subscription.unsubscribe();
+        return () => {
+            mounted = false;
+            clearTimeout(safetyTimer);
+            subscription.unsubscribe();
+        };
     }, []);
 
     // Login
