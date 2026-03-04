@@ -722,92 +722,98 @@ export default function App() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-indigo-600/5 rounded-full blur-[120px]" />
       </div>
 
-      <div className="relative max-w-lg mx-auto px-4 py-6">
-        {/* Header */}
-        <header className="mb-6">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600/15 border border-indigo-500/20 rounded-xl flex items-center justify-center">
-                <Shield size={22} className="text-indigo-400" />
+      <div className="relative max-w-lg mx-auto px-4">
+        {/* Sticky Header Section */}
+        <div className="sticky top-0 z-20 bg-[#06060e] pt-6 pb-2">
+          {/* Header */}
+          <header className="mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600/15 border border-indigo-500/20 rounded-xl flex items-center justify-center">
+                  <Shield size={22} className="text-indigo-400" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-white tracking-tight">Auth Vault</h1>
+                  <p className="text-xs text-gray-500">
+                    {isSuperAdmin ? (
+                      <span className="text-amber-400/80">Super Admin</span>
+                    ) : (
+                      <span>{user.email}</span>
+                    )}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">Auth Vault</h1>
-                <p className="text-xs text-gray-500">
-                  {isSuperAdmin ? (
-                    <span className="text-amber-400/80">Super Admin</span>
-                  ) : (
-                    <span>{user.email}</span>
-                  )}
-                </p>
+
+              <div className="flex items-center gap-2">
+                {/* Admin-only buttons */}
+                {isSuperAdmin && (
+                  <>
+                    <button
+                      onClick={() => setShowAdminPanel(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-600/15 hover:bg-amber-600/25 border border-amber-500/20 text-amber-400 hover:text-amber-300 text-xs font-medium rounded-lg transition-all"
+                      title="Admin Panel"
+                    >
+                      <Users size={15} />
+                      <span className="hidden sm:inline">Admin</span>
+                    </button>
+                    <button
+                      onClick={() => setShowScanner(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 text-xs font-medium rounded-lg transition-all"
+                      title="Import from QR code"
+                    >
+                      <ScanLine size={15} />
+                      <span className="hidden sm:inline">Import</span>
+                    </button>
+                    <button
+                      onClick={() => setShowAddModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-800/60 hover:bg-gray-800 border border-gray-700/40 text-gray-400 hover:text-white text-xs font-medium rounded-lg transition-all"
+                      title="Add account manually"
+                    >
+                      <Plus size={15} />
+                      <span className="hidden sm:inline">Add</span>
+                    </button>
+                  </>
+                )}
+
+                {/* Logout button */}
+                <button
+                  onClick={logout}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-800/40 hover:bg-red-600/15 border border-gray-700/30 hover:border-red-500/20 text-gray-500 hover:text-red-400 text-xs font-medium rounded-lg transition-all"
+                  title="Sign out"
+                >
+                  <LogOut size={15} />
+                </button>
               </div>
             </div>
+          </header>
 
-            <div className="flex items-center gap-2">
-              {/* Admin-only buttons */}
-              {isSuperAdmin && (
-                <>
-                  <button
-                    onClick={() => setShowAdminPanel(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-600/15 hover:bg-amber-600/25 border border-amber-500/20 text-amber-400 hover:text-amber-300 text-xs font-medium rounded-lg transition-all"
-                    title="Admin Panel"
-                  >
-                    <Users size={15} />
-                    <span className="hidden sm:inline">Admin</span>
-                  </button>
-                  <button
-                    onClick={() => setShowScanner(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 text-xs font-medium rounded-lg transition-all"
-                    title="Import from QR code"
-                  >
-                    <ScanLine size={15} />
-                    <span className="hidden sm:inline">Import</span>
-                  </button>
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-gray-800/60 hover:bg-gray-800 border border-gray-700/40 text-gray-400 hover:text-white text-xs font-medium rounded-lg transition-all"
-                    title="Add account manually"
-                  >
-                    <Plus size={15} />
-                    <span className="hidden sm:inline">Add</span>
-                  </button>
-                </>
-              )}
-
-              {/* Logout button */}
-              <button
-                onClick={logout}
-                className="flex items-center gap-1.5 px-3 py-2 bg-gray-800/40 hover:bg-red-600/15 border border-gray-700/30 hover:border-red-500/20 text-gray-500 hover:text-red-400 text-xs font-medium rounded-lg transition-all"
-                title="Sign out"
-              >
-                <LogOut size={15} />
-              </button>
-            </div>
+          {/* Encryption Badge */}
+          <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-emerald-500/5 border border-emerald-500/15 rounded-lg">
+            <Lock size={13} className="text-emerald-500" />
+            <span className="text-xs text-emerald-400/80">
+              {isSuperAdmin
+                ? `AES-256-GCM encrypted storage • ${accounts.length} account${accounts.length !== 1 ? 's' : ''}`
+                : `${accounts.length} account${accounts.length !== 1 ? 's' : ''} • View & Copy only`
+              }
+            </span>
           </div>
-        </header>
 
-        {/* Encryption Badge */}
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-emerald-500/5 border border-emerald-500/15 rounded-lg">
-          <Lock size={13} className="text-emerald-500" />
-          <span className="text-xs text-emerald-400/80">
-            {isSuperAdmin
-              ? `AES-256-GCM encrypted storage • ${accounts.length} account${accounts.length !== 1 ? 's' : ''}`
-              : `${accounts.length} account${accounts.length !== 1 ? 's' : ''} • View & Copy only`
-            }
-          </span>
+          {/* Search */}
+          {accounts.length > 3 && (
+            <div className="mb-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search accounts..."
+                className="w-full bg-gray-900/40 border border-gray-800/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/40 transition-all"
+              />
+            </div>
+          )}
+
+          {/* Bottom fade edge */}
+          <div className="h-2 bg-gradient-to-b from-[#06060e] to-transparent -mb-2" />
         </div>
-
-        {/* Search */}
-        {accounts.length > 3 && (
-          <div className="mb-4">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search accounts..."
-              className="w-full bg-gray-900/40 border border-gray-800/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/40 transition-all"
-            />
-          </div>
-        )}
 
         {/* Account List */}
         {loaded && accounts.length > 0 && (
