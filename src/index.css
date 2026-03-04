@@ -12,6 +12,11 @@ body {
   font-family: var(--font-sans);
 }
 
+#root {
+  min-width: 400px;
+  min-height: 600px;
+}
+
 @keyframes fadeInUp {
   from {
     opacity: 0;

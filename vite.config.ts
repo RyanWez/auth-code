@@ -13,6 +13,15 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
     modulePreload: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          supabase: ['@supabase/supabase-js'],
+          dnd: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+        },
+      },
+    },
   },
   resolve: {
     alias: {
