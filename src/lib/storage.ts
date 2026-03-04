@@ -131,10 +131,37 @@ export async function loadAccounts(): Promise<OTPAccount[]> {
 
 import { supabase } from './supabase';
 
+const SHARED_CACHE_KEY = 'auth_vault_shared_cache';
+
+/** Instantly load cached accounts from localStorage (synchronous, no network) */
+export function getCachedAccounts(): OTPAccount[] {
+  try {
+    const raw = localStorage.getItem(SHARED_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
+function cacheAccounts(accounts: OTPAccount[]) {
+  try {
+    localStorage.setItem(SHARED_CACHE_KEY, JSON.stringify(accounts));
+  } catch { /* ignore */ }
+}
+
+export function clearAccountsCache() {
+  localStorage.removeItem(SHARED_CACHE_KEY);
+}
+
 export async function saveSharedAccounts(accounts: OTPAccount[]): Promise<boolean> {
   try {
     const json = JSON.stringify(accounts);
     const encrypted = await encrypt(json);
+
+    // Cache locally for instant loading next time
+    cacheAccounts(accounts);
 
     const { error } = await supabase
       .from('shared_accounts')
@@ -168,7 +195,7 @@ export async function loadSharedAccounts(): Promise<OTPAccount[]> {
 
     if (error) {
       console.error('[Auth Vault] Supabase load failed:', error.message, error.details, error.hint);
-      return [];
+      return getCachedAccounts(); // Fallback to cache on error
     }
 
     if (!data?.accounts_data) {
@@ -178,11 +205,14 @@ export async function loadSharedAccounts(): Promise<OTPAccount[]> {
 
     const json = await decrypt(data.accounts_data);
     const accounts = JSON.parse(json);
-    if (Array.isArray(accounts)) return accounts;
+    if (Array.isArray(accounts)) {
+      cacheAccounts(accounts); // Update cache with fresh data
+      return accounts;
+    }
     return [];
   } catch (e) {
     console.error('[Auth Vault] Supabase load exception:', e);
-    return [];
+    return getCachedAccounts(); // Fallback to cache on error
   }
 }
 

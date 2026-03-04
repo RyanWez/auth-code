@@ -26,7 +26,7 @@ import {
   type OTPAccount, type NewAccount,
   generateCode, parseMigrationUrl, parseOtpauthUrl
 } from './lib/migration';
-import { saveAccounts, loadAccounts, saveSharedAccounts, loadSharedAccounts, subscribeToSharedAccounts } from './lib/storage';
+import { saveAccounts, loadAccounts, saveSharedAccounts, loadSharedAccounts, subscribeToSharedAccounts, getCachedAccounts } from './lib/storage';
 import { useAuth } from './lib/auth';
 import Scanner from './components/Scanner';
 import ExportModal from './components/ExportModal';
@@ -490,7 +490,8 @@ function SortableAccountWrapper({ account, timeLeft, progress, onDelete, onExpor
 export default function App() {
   const { user, role, loading: authLoading, logout } = useAuth();
 
-  const [accounts, setAccounts] = useState<OTPAccount[]>([]);
+  const cachedAccounts = getCachedAccounts();
+  const [accounts, setAccounts] = useState<OTPAccount[]>(cachedAccounts);
   const [showScanner, setShowScanner] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -498,7 +499,7 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(30);
   const [progress, setProgress] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(cachedAccounts.length > 0);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
@@ -513,12 +514,12 @@ export default function App() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Load accounts on mount — both roles read from shared Supabase table
+  // Load accounts on mount — refresh from Supabase in background
   useEffect(() => {
     if (!user || !role) return;
 
     const load = async () => {
-      // Try loading from shared Supabase first
+      // Try loading from shared Supabase
       const shared = await loadSharedAccounts();
       if (shared.length > 0) {
         setAccounts(shared);
@@ -526,7 +527,6 @@ export default function App() {
         // Fallback: Super Admin may have local-only data from before
         const local = await loadAccounts();
         setAccounts(local);
-        // Sync local to shared so regular users can see them
         if (local.length > 0) {
           await saveSharedAccounts(local);
         }

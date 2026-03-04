@@ -41,84 +41,126 @@ function isSuperAdmin(identifier: string, password: string): boolean {
     return identifier === SUPER_ADMIN_USERNAME && password === SUPER_ADMIN_PASSWORD;
 }
 
+// ── Session Cache Helpers (module-level for instant access) ─────────────────
+
+function saveSessionCache(u: User, r: UserRole) {
+    try {
+        localStorage.setItem('auth_vault_user', JSON.stringify({ id: u.id, email: u.email }));
+        localStorage.setItem('auth_vault_user_role', r);
+    } catch { /* ignore */ }
+}
+
+function clearSessionCache() {
+    localStorage.removeItem('auth_vault_user');
+    localStorage.removeItem('auth_vault_user_role');
+}
+
+function getInitialAuthState(): { user: User | null; role: UserRole | null; loading: boolean } {
+    try {
+        // Check Super Admin first
+        const savedRole = localStorage.getItem('auth_vault_role');
+        if (savedRole === 'super_admin') {
+            return {
+                user: { id: 'super_admin', email: SUPER_ADMIN_USERNAME, user_metadata: {} } as User,
+                role: 'super_admin',
+                loading: false,
+            };
+        }
+
+        // Check cached user session
+        const raw = localStorage.getItem('auth_vault_user');
+        const cachedRole = localStorage.getItem('auth_vault_user_role') as UserRole | null;
+        if (raw && cachedRole) {
+            const parsed = JSON.parse(raw);
+            return {
+                user: { id: parsed.id, email: parsed.email, user_metadata: {} } as User,
+                role: cachedRole,
+                loading: false,
+            };
+        }
+    } catch { /* ignore */ }
+
+    // No cached session — need to load from Supabase
+    return { user: null, role: null, loading: true };
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
-    const [role, setRole] = useState<UserRole | null>(null);
-    const [loading, setLoading] = useState(true);
+    // Read from cache SYNCHRONOUSLY on first render — zero delay!
+    const initial = getInitialAuthState();
+    const [user, setUser] = useState<User | null>(initial.user);
+    const [role, setRole] = useState<UserRole | null>(initial.role);
+    const [loading, setLoading] = useState(initial.loading);
 
-    // Helper: fetch profile role from Supabase
+    // Helper: fetch profile role with timeout
     const fetchRole = async (userId: string): Promise<UserRole> => {
         try {
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', userId)
-                .single();
-            return (profile?.role as UserRole) || 'user';
+            const result = await Promise.race([
+                supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', userId)
+                    .single(),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+            ]);
+            if (result && 'data' in result) {
+                return (result.data?.role as UserRole) || 'user';
+            }
+            return 'user';
         } catch {
             return 'user';
         }
     };
 
-    // Initialize auth on mount
+    // Background: validate/refresh session from Supabase
     useEffect(() => {
         let mounted = true;
 
-        // Safety timeout — never stay loading forever
-        const safetyTimer = setTimeout(() => {
-            if (mounted) setLoading(false);
-        }, 10000);
-
-        const init = async () => {
-            try {
-                // 1) Check local-only super admin first
-                const savedRole = localStorage.getItem('auth_vault_role');
-                if (savedRole === 'super_admin') {
-                    if (mounted) {
-                        setRole('super_admin');
-                        setUser({ id: 'super_admin', email: SUPER_ADMIN_USERNAME, user_metadata: {} } as User);
-                        setLoading(false);
-                    }
-                    return;
-                }
-
-                // 2) Check Supabase session
-                const { data: { session }, error } = await supabase.auth.getSession();
-
-                if (error) {
-                    console.warn('Auth: getSession failed:', error.message);
-                    if (mounted) setLoading(false);
-                    return;
-                }
-
-                if (session?.user && mounted) {
-                    setUser(session.user);
-                    const userRole = await fetchRole(session.user.id);
-                    if (mounted) setRole(userRole);
-                }
-
-                if (mounted) setLoading(false);
-            } catch (err) {
-                console.warn('Auth: init error:', err);
-                if (mounted) setLoading(false);
+        const refresh = async () => {
+            const savedRole = localStorage.getItem('auth_vault_role');
+            if (savedRole === 'super_admin') {
+                // Super Admin doesn't use Supabase — nothing to refresh
+                if (loading) setLoading(false);
+                return;
             }
+
+            try {
+                const result = await Promise.race([
+                    supabase.auth.getSession(),
+                    new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+                ]);
+
+                if (result && 'data' in result && result.data.session?.user && mounted) {
+                    const sessionUser = result.data.session.user;
+                    setUser(sessionUser);
+                    const freshRole = await fetchRole(sessionUser.id);
+                    if (mounted) {
+                        setRole(freshRole);
+                        saveSessionCache(sessionUser, freshRole);
+                    }
+                }
+            } catch {
+                // Keep using cached session
+            }
+
+            if (mounted && loading) setLoading(false);
         };
 
-        init();
+        refresh();
 
-        // Listen for auth state changes (token refresh, sign out, etc.)
+        // Listen for auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 if (!mounted) return;
 
-                const savedRole = localStorage.getItem('auth_vault_role');
-                if (savedRole === 'super_admin') return;
+                const savedAdminRole = localStorage.getItem('auth_vault_role');
+                if (savedAdminRole === 'super_admin') return;
 
                 if (event === 'SIGNED_OUT') {
                     setUser(null);
                     setRole(null);
+                    clearSessionCache();
                     return;
                 }
 
@@ -126,21 +168,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setUser(session.user);
                     try {
                         const userRole = await fetchRole(session.user.id);
-                        if (mounted) setRole(userRole);
+                        if (mounted) {
+                            setRole(userRole);
+                            saveSessionCache(session.user, userRole);
+                        }
                     } catch {
                         if (mounted) setRole('user');
                     }
-                } else if (event !== 'INITIAL_SESSION') {
-                    // Only clear user if it's not the initial load (which init() handles)
-                    setUser(null);
-                    setRole(null);
                 }
             }
         );
 
         return () => {
             mounted = false;
-            clearTimeout(safetyTimer);
             subscription.unsubscribe();
         };
     }, []);
@@ -171,7 +211,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .eq('id', data.user.id)
                 .single();
 
-            setRole((profile?.role as UserRole) || 'user');
+            const userRole = (profile?.role as UserRole) || 'user';
+            setRole(userRole);
+            saveSessionCache(data.user, userRole);
         }
         return null;
     }, []);
@@ -189,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         setUser(null);
         setRole(null);
+        clearSessionCache();
     }, []);
 
     // Create user (Super Admin only)
